@@ -118,6 +118,7 @@ class Slab(Structure):
                 fractional_coords. Defaults to None for no properties.
             energy (float): A value for the energy.
         """
+
         self.oriented_unit_cell = oriented_unit_cell
         self.ucell_entry = ucell_entry
         self.miller_index = tuple(miller_index)
