@@ -38,7 +38,7 @@ def make_doc():
         f.write(changes)
 
     with lcd("examples"):
-        local("ipython nbconvert --to html *.ipynb")
+        local("jupyter nbconvert --to html *.ipynb")
         local("mv *.html ../docs/_static")
     with lcd("docs"):
         local("cp ../CHANGES.rst change_log.rst")
@@ -127,14 +127,15 @@ def release_github():
 
 def update_changelog():
     output = subprocess.check_output(["git", "log", "--pretty=format:%s",
-        "v%s..HEAD" % ver])
+                                      "v%s..HEAD" % ver])
     lines = ["* " + l for l in output.strip().split("\n")]
     with open("CHANGES.rst") as f:
         contents = f.read()
-    toks = contents.split("==========")
-    toks.insert(-1, "\n\n" + "\n".join(lines))
+    l = "=========="
+    toks = contents.split(l)
+    toks.insert(-1, "\n\nvXXXX\n--------\n" + "\n".join(lines))
     with open("CHANGES.rst", "w") as f:
-        f.write("==========".join(toks))
+        f.write(toks[0] + l + "".join(toks[1:]))
 
 
 def log_ver():

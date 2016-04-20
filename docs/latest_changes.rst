@@ -1,10 +1,11 @@
 Change log
 ==========
 
-v3.2.5
+v3.4.0
 ------
-* Improved potcar setup via "pmg setup", with MAPI setup.
-* Support for new POTCARs issued by VASP.
-* Improvements to ABINIT support.
-* Improvement to Boltztrap support, e.g., scissor band gap, etc.
-* Vasprun now issues warning when unconverged run is detected.
+* 10-100x speed up to Structure copying and Site init, which means many
+  functionality has seen signifcant speed improvement (e.g., structure
+  matching).
+* Convenience method Structure.matches now perform similarity matching
+  for Structures.
+* Bugfix for band gap determination.

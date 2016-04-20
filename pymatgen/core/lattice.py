@@ -25,10 +25,10 @@ from six.moves import map, zip
 import numpy as np
 from numpy.linalg import inv
 from numpy import pi, dot, transpose, radians
-
-from pyhull.voronoi import VoronoiTess
+from scipy.spatial import Voronoi
 
 from monty.json import MSONable
+from monty.dev import deprecated
 from pymatgen.util.num_utils import abs_cap
 from pymatgen.core.units import ArrayWithUnit
 
@@ -65,8 +65,7 @@ class Lattice(MSONable):
             k = (i + 2) % 3
             angles[i] = abs_cap(dot(m[j], m[k]) / (lengths[j] * lengths[k]))
 
-        angles = np.arccos(angles) * 180. / pi
-        self._angles = angles
+        self._angles = np.arccos(angles) * 180. / pi
         self._lengths = lengths
         self._matrix = m
         # The inverse matrix is lazily generated for efficiency.
@@ -74,46 +73,12 @@ class Lattice(MSONable):
         self._metric_tensor = None
 
     @classmethod
-    def from_abivars(cls, *args, **kwargs):
-        """
-        Returns a new instance from a dictionary with the variables
-        used in ABINIT to define the unit cell.
-        """
-        kwargs.update(dict(*args))
-        d = kwargs
-        rprim = d.get("rprim", None)
-        angdeg = d.get("angdeg", None)
-        acell = d["acell"]
+    @deprecated(message="from_abivars has been merged with the from_dict "
+                "method. Use from_dict(fmt=\"abivars\"). from_abivars "
+                "will be removed in pymatgen 4.0.")
+    def from_abivars(cls, d, **kwargs):
 
-        # Call pymatgen constructors (note that pymatgen uses Angstrom instead of Bohr).
-        if rprim is not None:
-            assert angdeg is None
-            rprim = np.reshape(rprim, (3,3))
-            rprimd = [float(acell[i]) * rprim[i] for i in range(3)]
-            return cls(ArrayWithUnit(rprimd, "bohr").to("ang"))
-
-        elif angdeg is not None:
-            # angdeg(0) is the angle between the 2nd and 3rd vectors,
-            # angdeg(1) is the angle between the 1st and 3rd vectors,
-            # angdeg(2) is the angle between the 1st and 2nd vectors,
-            raise NotImplementedError("angdeg convention should be tested")
-            angles = angdeg
-            angles[1] = -angles[1]
-            l = ArrayWithUnit(acell, "bohr").to("ang")
-            return cls.from_lengths_and_angles(l, angdeg)
-
-        else:
-            raise ValueError("Don't know how to construct a Lattice from dict: %s" % str(d))
-
-    #def to_abivars(self, **kwargs):
-    #    # Should we use (rprim, acell) or (angdeg, acell) to specify the lattice?
-    #    geomode = kwargs.pop("geomode", "rprim")
-    #    if geomode == "rprim":
-    #        return dict(acell=3 * [1.0], rprim=rprim))
-    #    elif geomode == "angdeg":
-    #        return dict(acell=3 * [1.0], angdeg=angdeg))
-    #    else:
-    #        raise ValueError("Wrong value for geomode: %s" % geomode)
+        return Lattice.from_dict(d, fmt="abivars", **kwargs)
 
     def copy(self):
         """Deep copy of self."""
@@ -302,11 +267,39 @@ class Lattice(MSONable):
         return Lattice([vector_a, vector_b, vector_c])
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls, d, fmt=None, **kwargs):
         """
         Create a Lattice from a dictionary containing the a, b, c, alpha, beta,
         and gamma parameters.
+
         """
+        if fmt == "abivars":
+            kwargs.update(d)
+            d = kwargs
+            rprim = d.get("rprim", None)
+            angdeg = d.get("angdeg", None)
+            acell = d["acell"]
+
+            # Call pymatgen constructors (note that pymatgen uses Angstrom instead of Bohr).
+            if rprim is not None:
+                assert angdeg is None
+                rprim = np.reshape(rprim, (3,3))
+                rprimd = [float(acell[i]) * rprim[i] for i in range(3)]
+                return cls(ArrayWithUnit(rprimd, "bohr").to("ang"))
+
+            elif angdeg is not None:
+                # angdeg(0) is the angle between the 2nd and 3rd vectors,
+                # angdeg(1) is the angle between the 1st and 3rd vectors,
+                # angdeg(2) is the angle between the 1st and 2nd vectors,
+                raise NotImplementedError("angdeg convention should be tested")
+                angles = angdeg
+                angles[1] = -angles[1]
+                l = ArrayWithUnit(acell, "bohr").to("ang")
+                return cls.from_lengths_and_angles(l, angdeg)
+
+            else:
+                raise ValueError("Don't know how to construct a Lattice from dict: %s" % str(d))
+
         if "matrix" in d:
             return cls(d["matrix"])
         else:
@@ -438,20 +431,30 @@ class Lattice(MSONable):
         return "\n".join([" ".join(["%.6f" % i for i in row])
                           for row in self._matrix])
 
-    def as_dict(self):
+    def as_dict(self, verbosity=0):
         """""
         Json-serialization dict representation of the Lattice.
+
+        Args:
+            verbosity (int): Verbosity level. Default of 0 only includes the
+                matrix representation. Set to 1 for more details.
         """
-        return {"@module": self.__class__.__module__,
-                "@class": self.__class__.__name__,
-                "matrix": self._matrix.tolist(),
+
+        d = {"@module": self.__class__.__module__,
+             "@class": self.__class__.__name__,
+             "matrix": self._matrix.tolist()}
+        if verbosity > 0:
+            d.update({
                 "a": float(self.a),
                 "b": float(self.b),
                 "c": float(self.c),
                 "alpha": float(self.alpha),
                 "beta": float(self.beta),
                 "gamma": float(self.gamma),
-                "volume": float(self.volume)}
+                "volume": float(self.volume)
+            })
+
+        return d
 
     def find_all_mappings(self, other_lattice, ltol=1e-5, atol=1,
                           skip_rotation_matrix=False):
@@ -512,7 +515,7 @@ class Lattice(MSONable):
                                   np.logical_and(alphab,
                                                  betab[i][None, :]))
             for j, k in np.argwhere(inds):
-                scale_m = np.array((f_a[i], f_b[j], f_c[k]))
+                scale_m = np.array((f_a[i], f_b[j], f_c[k]), dtype=np.int)
                 if abs(np.linalg.det(scale_m)) < 1e-8:
                     continue
 
@@ -802,11 +805,11 @@ class Lattice(MSONable):
         list_k_points = []
         for i, j, k in itertools.product([-1, 0, 1], [-1, 0, 1], [-1, 0, 1]):
             list_k_points.append(i * vec1 + j * vec2 + k * vec3)
-        tess = VoronoiTess(list_k_points)
+        tess = Voronoi(list_k_points)
         to_return = []
-        for r in tess.ridges:
+        for r in tess.ridge_dict:
             if r[0] == 13 or r[1] == 13:
-                to_return.append([tess.vertices[i] for i in tess.ridges[r]])
+                to_return.append([tess.vertices[i] for i in tess.ridge_dict[r]])
 
         return to_return
 
@@ -902,35 +905,31 @@ class Lattice(MSONable):
             else:
                 fcoords, dists, inds
         """
-        recp_len = np.array(self.reciprocal_lattice.abc)
-        sr = r + 0.15
-        nmax = sr * recp_len / (2 * math.pi)
+        recp_len = np.array(self.reciprocal_lattice_crystallographic.abc)
+        nmax = r * recp_len + 0.01
+
         pcoords = self.get_fractional_coords(center)
-        floor = math.floor
+        center = np.array(center)
 
         n = len(frac_points)
-        fcoords = np.array(frac_points)
-        pts = np.tile(center, (n, 1))
-        indices = np.array(list(range(n)))
+        fcoords = np.array(frac_points) % 1
+        indices = np.arange(n)
 
-        arange = np.arange(start=int(floor(pcoords[0] - nmax[0])),
-                           stop=int(floor(pcoords[0] + nmax[0])) + 1)
-        brange = np.arange(start=int(floor(pcoords[1] - nmax[1])),
-                           stop=int(floor(pcoords[1] + nmax[1])) + 1)
-        crange = np.arange(start=int(floor(pcoords[2] - nmax[2])),
-                           stop=int(floor(pcoords[2] + nmax[2])) + 1)
-
+        mins = np.floor(pcoords - nmax)
+        maxes = np.ceil(pcoords + nmax)
+        arange = np.arange(start=mins[0], stop=maxes[0])
+        brange = np.arange(start=mins[1], stop=maxes[1])
+        crange = np.arange(start=mins[2], stop=maxes[2])
         arange = arange[:, None] * np.array([1, 0, 0])[None, :]
         brange = brange[:, None] * np.array([0, 1, 0])[None, :]
         crange = crange[:, None] * np.array([0, 0, 1])[None, :]
-
         images = arange[:, None, None] + brange[None, :, None] +\
             crange[None, None, :]
 
         shifted_coords = fcoords[:, None, None, None, :] + \
             images[None, :, :, :, :]
         coords = self.get_cartesian_coords(shifted_coords)
-        dists = np.sqrt(np.sum((coords - pts[:, None, None, None, :]) ** 2,
+        dists = np.sqrt(np.sum((coords - center[None, None, None, None, :]) ** 2,
                                axis=4))
         within_r = np.where(dists <= r)
         if zip_results:

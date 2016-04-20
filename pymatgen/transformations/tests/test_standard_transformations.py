@@ -17,7 +17,7 @@ __date__ = "Sep 23, 2011"
 
 import os
 import random
-import unittest
+import unittest2 as unittest
 import json
 import six
 
@@ -343,8 +343,7 @@ class OrderDisorderedStructureTransformationTest(unittest.TestCase):
                                      {"Si4+": 0.5, "O2-": 0.25, "P5+": 0.25}],
                            coords)
         output = t.apply_transformation(struct, return_ranked_list=3)
-        self.assertAlmostEqual(output[0]['energy'], -175.0599307, 4,
-                               'got incorrect energy')
+        self.assertAlmostEqual(output[0]['energy'], -234.57813667648315, 4)
 
 
 class PrimitiveCellTransformationTest(unittest.TestCase):

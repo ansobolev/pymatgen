@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-import unittest
+import unittest2 as unittest
 import math
 
 import numpy as np
@@ -127,6 +127,12 @@ class SQTensorTest(PymatgenTest):
                               SQTensor([[1e-6, 1 + 1e-5, 1e-6],
                                         [1 + 1e-6, 1e-6, 1e-6],
                                         [0, 0, 1 + 1e-5]]))
+        self.assertArrayEqual(SQTensor([[1e-6, -30, 1],
+                                        [1e-7, 1, 0],
+                                        [1e-8, 0, 1]]).zeroed(),
+                              SQTensor([[0, -30, 1],
+                                        [0, 1, 0],
+                                        [0, 0, 1]]))
 
 
 if __name__ == '__main__':

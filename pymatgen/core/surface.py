@@ -17,7 +17,12 @@ __maintainer__ = "Shyue Ping Ong"
 __email__ = "ongsp@ucsd.edu"
 __date__ = "6/10/14"
 
-from fractions import gcd
+try:
+    # New Py>=3.5 import
+    from math import gcd
+except ImportError:
+    # Deprecated import from Py3.5 onwards.
+    from fractions import gcd
 import math
 import itertools
 import logging
@@ -175,6 +180,35 @@ class Slab(Structure):
         return Slab(s.lattice, s.species_and_occu, s.frac_coords,
                     self.miller_index, self.oriented_unit_cell, self.shift,
                     self.scale_factor, site_properties=s.site_properties)
+
+    def copy(self, site_properties=None, sanitize=False):
+        """
+        Convenience method to get a copy of the structure, with options to add
+        site properties.
+
+        Args:
+            site_properties (dict): Properties to add or override. The
+                properties are specified in the same way as the constructor,
+                i.e., as a dict of the form {property: [values]}. The
+                properties should be in the order of the *original* structure
+                if you are performing sanitization.
+            sanitize (bool): If True, this method will return a sanitized
+                structure. Sanitization performs a few things: (i) The sites are
+                sorted by electronegativity, (ii) a LLL lattice reduction is
+                carried out to obtain a relatively orthogonalized cell,
+                (iii) all fractional coords for sites are mapped into the
+                unit cell.
+
+        Returns:
+            A copy of the Structure, with optionally new site_properties and
+            optionally sanitized.
+        """
+        props = self.site_properties
+        if site_properties:
+            props.update(site_properties)
+        return Slab(self.lattice, self.species_and_occu, self.frac_coords,
+                    self.miller_index, self.oriented_unit_cell, self.shift,
+                    self.scale_factor, site_properties=props)
 
     @property
     def dipole(self):
@@ -607,7 +641,6 @@ class SlabGenerator(object):
                             elif c_range[0] != c_range[1]:
                                 c_ranges.add(c_range)
         return c_ranges
-
 
     def get_slabs(self, bonds=None, tol=0.1, max_broken_bonds=0):
         """
