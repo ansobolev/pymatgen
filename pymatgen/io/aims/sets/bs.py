@@ -4,12 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from pymatgen.symmetry.bandstructure import HighSymmKpath
 from pymatgen.core import Structure
 from pymatgen.io.aims.sets.base import AimsInputGenerator
+from pymatgen.symmetry.bandstructure import HighSymmKpath
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
     from pymatgen.core import Molecule
 
 __author__ = "Andrey Sobolev and Thomas A. R. Purcell"
@@ -33,9 +34,7 @@ class BandStructureSetGenerator(AimsInputGenerator):
     calc_type: str = "bands"
     k_point_density: float = 20
 
-    def get_parameter_updates(
-        self, structure: Structure, prev_parameters: dict[str, Any]
-    ) -> dict[str, Sequence[str]]:
+    def get_parameter_updates(self, structure: Structure, prev_parameters: dict[str, Any]) -> dict[str, Sequence[str]]:
         """Get the parameter updates for the calculation.
 
         Parameters
@@ -70,9 +69,7 @@ class GWSetGenerator(AimsInputGenerator):
     calc_type: str = "GW"
     k_point_density: float = 20
 
-    def get_parameter_updates(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    def get_parameter_updates(self, structure: Structure | Molecule, prev_parameters: dict[str, Any]) -> dict[str, Any]:
         """Get the parameter updates for the calculation.
 
         Parameters
@@ -92,8 +89,7 @@ class GWSetGenerator(AimsInputGenerator):
             updates.update(
                 {
                     "qpe_calc": "gw_expt",
-                    "output": current_output
-                    + _prepare_band_input(structure, self.k_point_density),
+                    "output": current_output + _prepare_band_input(structure, self.k_point_density),
                 }
             )
         else:
@@ -124,23 +120,17 @@ def _prepare_band_input(structure: Structure, density: float = 20):
     bp = HighSymmKpath(structure)
     points, labels = bp.get_kpoints(line_density=density, coords_are_cartesian=False)
     lines_and_labels: list[_SegmentDict] = []
-    current_segment: _SegmentDict | None = None
+    current_segment: _SegmentDict = _SegmentDict(coords=[], labels=[], length=0)
     for label_, coords in zip(labels, points):
         # rename the Gamma point label
         label = "G" if label_ in ("GAMMA", "\\Gamma", "Γ") else label_
+        current_segment["length"] += 1
         if label:
-            if current_segment is None:
-                current_segment = _SegmentDict(
-                    coords=[coords], labels=[label], length=1
-                )
-            else:
-                current_segment["coords"].append(coords)
-                current_segment["labels"].append(label)
-                current_segment["length"] += 1
+            current_segment["coords"].append(coords)
+            current_segment["labels"].append(label)
+            if current_segment["length"] > 1:
                 lines_and_labels.append(current_segment)
-                current_segment = None
-        else:
-            current_segment["length"] += 1
+                current_segment = _SegmentDict(coords=[], labels=[], length=0)
 
     bands = []
     for segment in lines_and_labels:

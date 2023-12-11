@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
-from pymatgen.core import Lattice, Structure
 
-from pymatgen.io.aims.sets.base import AimsInputSet
+from pymatgen.core import Lattice, Structure
 from pymatgen.io.aims.inputs import AimsGeometryIn
+from pymatgen.io.aims.sets.base import AimsInputSet
 
 infile_dir = Path(__file__).parent / "input_files"
 species_dir = Path(__file__).parent / "species_directory"
@@ -295,13 +297,11 @@ def test_input_set():
     assert check_file(control_in_str, in_set.control_in.get_str())
     assert parameters_json_str == in_set.parameters_json
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"The key \(.*\) is not in self._parameters"):
         in_set.remove_parameters(keys=["relax_geometry"], strict=True)
 
     new_structure = Structure(
-        lattice=Lattice(
-            [[0.0, 2.715, 2.715], [2.715, 0.0, 2.715], [2.715, 2.715, 0.0]]
-        ),
+        lattice=Lattice([[0.0, 2.715, 2.715], [2.715, 0.0, 2.715], [2.715, 2.715, 0.0]]),
         species=["Si", "Si"],
         coords=[[-0.01, 0, 0], [0.25, 0.25, 0.25]],
     )

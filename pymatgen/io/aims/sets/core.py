@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pymatgen.core import Structure
-
 from pymatgen.io.aims.sets.base import AimsInputGenerator
 
 if TYPE_CHECKING:
@@ -31,9 +30,7 @@ class StaticSetGenerator(AimsInputGenerator):
 
     calc_type: str = "static"
 
-    def get_parameter_updates(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    def get_parameter_updates(self, structure: Structure | Molecule, prev_parameters: dict[str, Any]) -> dict[str, Any]:
         """Get the parameter updates for the calculation.
 
         Parameters
@@ -74,9 +71,7 @@ class RelaxSetGenerator(AimsInputGenerator):
     max_force: float = 1e-3
     method: str = "trm"
 
-    def get_parameter_updates(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any]
-    ) -> dict:
+    def get_parameter_updates(self, structure: Structure | Molecule, prev_parameters: dict[str, Any]) -> dict:
         """Get the parameter updates for the calculation.
 
         Parameters
@@ -117,9 +112,7 @@ class SocketIOSetGenerator(AimsInputGenerator):
     host: str = "localhost"
     port: int = 12345
 
-    def get_parameter_updates(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any]
-    ) -> dict:
+    def get_parameter_updates(self, structure: Structure | Molecule, prev_parameters: dict[str, Any]) -> dict:
         """Get the parameter updates for the calculation.
 
         Parameters

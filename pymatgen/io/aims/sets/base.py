@@ -12,16 +12,12 @@ from warnings import warn
 
 import numpy as np
 from monty.json import MontyDecoder, MontyEncoder
+
 from pymatgen.core import Molecule, Structure
+from pymatgen.io.aims import CONTROL_FILE_NAME, GEOMETRY_FILE_NAME, PARAMS_JSON_FILE_NAME
 from pymatgen.io.aims.inputs import AimsControlIn, AimsGeometryIn
 from pymatgen.io.aims.parsers import AimsParseError, read_aims_output
 from pymatgen.io.core import InputFile, InputGenerator, InputSet
-
-from pymatgen.io.aims import (
-    CONTROL_FILE_NAME,
-    GEOMETRY_FILE_NAME,
-    PARAMS_JSON_FILE_NAME
-)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -103,7 +99,7 @@ class AimsInputSet(InputSet):
     def __init__(
         self,
         parameters: dict[str, Any],
-        structure: Structure | Molecule,
+        structure: Structure | Molecule | None,
         properties: Sequence[str] = ("energy", "free_energy"),
     ):
         """Construct the AimsInputSet.
@@ -117,6 +113,9 @@ class AimsInputSet(InputSet):
         properties: Sequence[str]
             The properties to calculate for the calculation
         """
+        if structure is None:
+            raise ValueError("Cannot build input set without structure")
+
         self._parameters = parameters
         self._structure = structure
         self._properties = properties
@@ -126,9 +125,7 @@ class AimsInputSet(InputSet):
             inputs={
                 CONTROL_FILE_NAME: aims_control_in,
                 GEOMETRY_FILE_NAME: aims_geometry_in,
-                PARAMS_JSON_FILE_NAME: json.dumps(
-                    self._parameters, indent=2, cls=MontyEncoder
-                ),
+                PARAMS_JSON_FILE_NAME: json.dumps(self._parameters, indent=2, cls=MontyEncoder),
             }
         )
 
@@ -163,24 +160,24 @@ class AimsInputSet(InputSet):
         return aims_control_in_content, aims_geometry_in_content
 
     @property
-    def control_in(self) -> str:
+    def control_in(self):
         """Get the control.in file contents."""
         return self[CONTROL_FILE_NAME]
 
     @property
-    def geometry_in(self) -> str:
+    def geometry_in(self):
         """Get the geometry.in file contents."""
         return self[GEOMETRY_FILE_NAME]
 
     @property
-    def parameters_json(self) -> str:
+    def parameters_json(self):
         """Get the JSON representation of the parameters dict."""
         return self[PARAMS_JSON_FILE_NAME]
 
     def set_parameters(self, *args, **kwargs) -> dict[str, Any]:
         """Set the parameters object for the AimsTemplate.
 
-        This sets the parameters object that is passed to an AimsTempalte and
+        This sets the parameters object that is passed to an AimsTemplate and
         resets the control.in file
 
         One can pass a dictionary mapping the aims variables to their values or
@@ -200,16 +197,12 @@ class AimsInputSet(InputSet):
 
         aims_control_in, _ = self.get_input_files()
         self.inputs[CONTROL_FILE_NAME] = aims_control_in
-        self.inputs[PARAMS_JSON_FILE_NAME] = json.dumps(
-            self._parameters, indent=2, cls=MontyEncoder
-        )
-        self.__dict__.update(self.inputs)
+        self.inputs[PARAMS_JSON_FILE_NAME] = json.dumps(self._parameters, indent=2, cls=MontyEncoder)
+        self.__dict__.update({str(k): v for k, v in self.inputs.items()})
 
         return self._parameters
 
-    def remove_parameters(
-        self, keys: Iterable[str] | str, strict: bool = True
-    ) -> dict[str, Any]:
+    def remove_parameters(self, keys: Iterable[str] | str, strict: bool = True) -> dict[str, Any]:
         """Remove the aims parameters listed in keys.
 
         This removes the aims variables from the parameters object.
@@ -253,7 +246,7 @@ class AimsInputSet(InputSet):
         aims_control_in, aims_geometry_in = self.get_input_files()
         self.inputs[GEOMETRY_FILE_NAME] = aims_geometry_in
         self.inputs[CONTROL_FILE_NAME] = aims_control_in
-        self.__dict__.update(self.inputs)
+        self.__dict__.update({str(k): v for k, v in self.inputs.items()})
 
     def deepcopy(self):
         """Deep copy of the input set."""
@@ -278,9 +271,9 @@ class AimsInputGenerator(InputGenerator):
 
     def get_input_set(  # type: ignore
         self,
-        structure: Structure | Molecule = None,
-        prev_dir: str | Path = None,
-        properties: list[str] = None,
+        structure: Structure | Molecule | None = None,
+        prev_dir: str | Path | None = None,
+        properties: list[str] | None = None,
     ) -> AimsInputSet:
         """Generate an AimsInputSet object.
 
@@ -303,14 +296,12 @@ class AimsInputGenerator(InputGenerator):
         parameters = self._get_input_parameters(structure, prev_parameters)
         properties = self._get_properties(properties, parameters)
 
-        return AimsInputSet(
-            parameters=parameters, structure=structure, properties=properties
-        )
+        return AimsInputSet(parameters=parameters, structure=structure, properties=properties)
 
     @staticmethod
     def _read_previous(
-        prev_dir: str | Path = None
-    ) -> tuple[Structure | Molecule, dict[str, Any], dict[str, list[float]]]:
+        prev_dir: str | Path | None = None,
+    ) -> tuple[Structure | Molecule | None, dict, dict]:
         """Read in previous results.
 
         Parameters
@@ -329,12 +320,8 @@ class AimsInputGenerator(InputGenerator):
             split_prev_dir = str(prev_dir).split(":")[-1]
             with open(f"{split_prev_dir}/parameters.json") as param_file:
                 prev_parameters = json.load(param_file, cls=MontyDecoder)
-
+                prev_structure = read_aims_output(f"{split_prev_dir}/aims.out", index=slice(-1, None))[0]
             try:
-                prev_structure = read_aims_output(
-                    f"{split_prev_dir}/aims.out", index=slice(-1, None)
-                )[0]
-
                 prev_results = prev_structure.properties
                 prev_results.update(prev_structure.site_properties)
             except (IndexError, AimsParseError):
@@ -344,8 +331,8 @@ class AimsInputGenerator(InputGenerator):
 
     @staticmethod
     def _get_properties(
-        properties: list[str] = None,
-        parameters: dict[str, Any] = None,
+        properties: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> list[str]:
         """Get the properties to calculate.
 
@@ -363,6 +350,9 @@ class AimsInputGenerator(InputGenerator):
         if properties is None:
             properties = ["energy", "free_energy"]
 
+        if parameters is None:
+            parameters = {}
+
         if "compute_forces" in parameters and "forces" not in properties:
             properties.append("forces")
         if "compute_heat_flux" in parameters and "stresses" not in properties:
@@ -378,7 +368,7 @@ class AimsInputGenerator(InputGenerator):
         return properties
 
     def _get_input_parameters(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any] = None
+        self, structure: Structure | Molecule | None, prev_parameters: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Create the input parameters.
 
@@ -393,6 +383,9 @@ class AimsInputGenerator(InputGenerator):
         -------
         The input object
         """
+        if structure is None:
+            raise ValueError("Cannot create input parameters without structure")
+
         # Get the default configuration
         # FHI-aims recommends using their defaults so bare-bones default parameters
         parameters: dict[str, Any] = {
@@ -401,9 +394,7 @@ class AimsInputGenerator(InputGenerator):
         }
 
         # Override default parameters with previous parameters
-        prev_parameters = (
-            {} if prev_parameters is None else copy.deepcopy(prev_parameters)
-        )
+        prev_parameters = {} if prev_parameters is None else copy.deepcopy(prev_parameters)
         prev_parameters.pop("relax_geometry", None)
         prev_parameters.pop("relax_unit_cell", None)
 
@@ -434,9 +425,7 @@ class AimsInputGenerator(InputGenerator):
 
         return parameters
 
-    def get_parameter_updates(
-        self, structure: Structure | Molecule, prev_parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+    def get_parameter_updates(self, structure: Structure | Molecule, prev_parameters: dict[str, Any]) -> dict[str, Any]:
         """Update the parameters for a given calculation type.
 
         Parameters
@@ -526,12 +515,7 @@ class AimsInputGenerator(InputGenerator):
         kpts: list[int] = []
         for i in range(3):
             if pbc[i]:
-                k = (
-                    2
-                    * np.pi
-                    * np.sqrt((recipcell[i] ** 2).sum())
-                    * float(kptdensity[i])
-                )
+                k = 2 * np.pi * np.sqrt((recipcell[i] ** 2).sum()) * float(kptdensity[i])
                 if even:
                     kpts.append(2 * int(np.ceil(k / 2)))
                 else:
@@ -566,9 +550,7 @@ def recursive_update(dct: dict, up: dict) -> dict:
     for key, val in up.items():
         if isinstance(val, dict):
             dct[key] = recursive_update(dct.get(key, {}), val)
-        elif key == "output" and isinstance(
-            val, list
-        ):  # for all other keys the list addition is not needed (I guess)
+        elif key == "output" and isinstance(val, list):  # for all other keys the list addition is not needed (I guess)
             old_v = dct.get(key, [])
             dct[key] = old_v + val
         else:
