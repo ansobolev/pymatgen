@@ -153,11 +153,11 @@ class AimsInputSet(InputSet):
         aims_geometry_in = AimsGeometryIn.from_structure(self._structure)
         aims_control_in = AimsControlIn(updated_params)
 
-        with tempfile.TemporaryDirectory() as _:
-            aims_control_in.write_file(self._structure)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            aims_control_in.write_file(self._structure, directory=tmpdir)
             aims_control_in_content = AimsInputFile.from_file("control.in")
 
-            aims_geometry_in.write_file()
+            aims_geometry_in.write_file(directory=tmpdir)
             aims_geometry_in_content = AimsInputFile.from_file("geometry.in")
 
         return aims_control_in_content, aims_geometry_in_content

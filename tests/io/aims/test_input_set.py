@@ -241,7 +241,10 @@ atom  1.357500000000e+00  1.357500000000e+00  1.357500000000e+00 Si
 def check_file(ref: str, test: str) -> bool:
     ref_lines = [line.strip() for line in ref.split("\n") if len(line.strip()) > 0]
     test_lines = [line.strip() for line in test.split("\n") if len(line.strip()) > 0]
-
+    print("REF: ")
+    print(ref_lines[5:])
+    print("TEST: ")
+    print(test_lines[5:])
     return ref_lines[5:] == test_lines[5:]
 
 
