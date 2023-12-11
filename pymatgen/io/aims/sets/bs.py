@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
+from pymatgen.symmetry.bandstructure import HighSymmKpath
 from pymatgen.core import Structure
-
 from pymatgen.io.aims.sets.base import AimsInputGenerator
-from atomate2.aims.utils.bands import prepare_band_input
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
     from pymatgen.core import Molecule
+
+__author__ = "Andrey Sobolev and Thomas A. R. Purcell"
+__version__ = "1.0"
+__email__ = "andrey.n.sobolev@gmail.com and purcellt@arizona.edu"
+__date__ = "November 2023"
 
 
 @dataclass
@@ -47,7 +50,7 @@ class BandStructureSetGenerator(AimsInputGenerator):
         The updated for the parameters for the output section of FHI-aims
         """
         updated_outputs = prev_parameters.get("output", [])
-        updated_outputs += prepare_band_input(structure, self.k_point_density)
+        updated_outputs += _prepare_band_input(structure, self.k_point_density)
         return {"output": updated_outputs}
 
 
@@ -90,7 +93,7 @@ class GWSetGenerator(AimsInputGenerator):
                 {
                     "qpe_calc": "gw_expt",
                     "output": current_output
-                    + prepare_band_input(structure, self.k_point_density),
+                    + _prepare_band_input(structure, self.k_point_density),
                 }
             )
         else:
@@ -100,3 +103,52 @@ class GWSetGenerator(AimsInputGenerator):
                 }
             )
         return updates
+
+
+class _SegmentDict(TypedDict):
+    coords: list[list[float]]
+    labels: list[str]
+    length: int
+
+
+def _prepare_band_input(structure: Structure, density: float = 20):
+    """Prepare the band information needed for the FHI-aims control.in file.
+
+    Parameters
+    ----------
+    structure: Structure
+        The structure for which the band path is calculated
+    density: float
+        Number of kpoints per Angstrom.
+    """
+    bp = HighSymmKpath(structure)
+    points, labels = bp.get_kpoints(line_density=density, coords_are_cartesian=False)
+    lines_and_labels: list[_SegmentDict] = []
+    current_segment: _SegmentDict | None = None
+    for label_, coords in zip(labels, points):
+        # rename the Gamma point label
+        label = "G" if label_ in ("GAMMA", "\\Gamma", "Γ") else label_
+        if label:
+            if current_segment is None:
+                current_segment = _SegmentDict(
+                    coords=[coords], labels=[label], length=1
+                )
+            else:
+                current_segment["coords"].append(coords)
+                current_segment["labels"].append(label)
+                current_segment["length"] += 1
+                lines_and_labels.append(current_segment)
+                current_segment = None
+        else:
+            current_segment["length"] += 1
+
+    bands = []
+    for segment in lines_and_labels:
+        start, end = segment["coords"]
+        lstart, lend = segment["labels"]
+        bands.append(
+            f"band {start[0]:9.5f}{start[1]:9.5f}{start[2]:9.5f} "
+            f"{end[0]:9.5f}{end[1]:9.5f}{end[2]:9.5f} {segment['length']:4d} "
+            f"{lstart:3}{lend:3}"
+        )
+    return bands

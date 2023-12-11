@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -16,16 +17,19 @@ from pymatgen.io.aims.inputs import AimsControlIn, AimsGeometryIn
 from pymatgen.io.aims.parsers import AimsParseError, read_aims_output
 from pymatgen.io.core import InputFile, InputGenerator, InputSet
 
-from atomate2.aims.utils.common import (
+from pymatgen.io.aims import (
     CONTROL_FILE_NAME,
     GEOMETRY_FILE_NAME,
-    PARAMS_JSON_FILE_NAME,
-    TMPDIR_NAME,
-    cwd,
+    PARAMS_JSON_FILE_NAME
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+__author__ = "Andrey Sobolev and Thomas A. R. Purcell"
+__version__ = "1.0"
+__email__ = "andrey.n.sobolev@gmail.com and purcellt@arizona.edu"
+__date__ = "November 2023"
 
 DEFAULT_AIMS_PROPERTIES = [
     "energy",
@@ -149,7 +153,7 @@ class AimsInputSet(InputSet):
         aims_geometry_in = AimsGeometryIn.from_structure(self._structure)
         aims_control_in = AimsControlIn(updated_params)
 
-        with cwd(TMPDIR_NAME, mkdir=True, rmdir=True):
+        with tempfile.TemporaryDirectory() as _:
             aims_control_in.write_file(self._structure)
             aims_control_in_content = AimsInputFile.from_file("control.in")
 
@@ -474,7 +478,8 @@ class AimsInputGenerator(InputGenerator):
         recipcell = structure.lattice.inv_matrix
         return self.d2k_recipcell(recipcell, structure.lattice.pbc, kptdensity, even)
 
-    def k2d(self, structure: Structure, k_grid: np.ndarray[int]):
+    @staticmethod
+    def k2d(structure: Structure, k_grid: np.ndarray[int]):
         """Generate the kpoint density in each direction from given k_grid.
 
         Parameters
