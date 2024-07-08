@@ -189,10 +189,16 @@ class AimsInputGenerator(InputGenerator):
             parameters for the FHI-aims calculator
         user_kpoints_settings (dict[str, Any]):  The settings
             used to create the k-grid parameters for FHI-aims
+        use_structure_charge (bool): Whether to explicitly set the
+            total structure charge in `control.in`
+        auto_mix_param (bool): Whether to set the charge mixing parameter
+            automatically based on the metallicity of the structure
     """
 
     user_params: dict[str, Any] = field(default_factory=dict)
     user_kpoints_settings: dict[str, Any] = field(default_factory=dict)
+    use_structure_charge: bool = False
+    auto_mix_param: bool = False
 
     def get_input_set(
         self,
@@ -220,6 +226,13 @@ class AimsInputGenerator(InputGenerator):
 
         parameters = self._get_input_parameters(structure, prev_parameters)
         properties = self._get_properties(properties, parameters)
+
+        if self.auto_mix_param and not all(elem.is_metal for elem in structure.composition):
+            logger.info("Structure seems not to be metallic; setting `charge_mix_param` to non-metallic default")
+            parameters["charge_mix_param"] = 0.3
+
+        if self.use_structure_charge:
+            parameters["charge"] = structure.charge
 
         return AimsInputSet(parameters=parameters, structure=structure, properties=properties)
 
