@@ -17,7 +17,7 @@ import numpy as np
 from monty.io import zopen
 from monty.json import MontyDecoder, MSONable
 from monty.os.path import zpath
-from pymatgen.core import SETTINGS, Element, Lattice, Molecule, Structure
+from pymatgen.core import SETTINGS, Element, Lattice, Molecule, Species, Structure
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -148,7 +148,7 @@ class AimsGeometryIn(MSONable):
         magmoms = structure.site_properties.get("magmom", np.zeros(len(structure.species)))
         velocities = structure.site_properties.get("velocity", [None for _ in structure.species])
         for species, coord, charge, magmom, v in zip(
-            structure.species, structure.cart_coords, charges, magmoms, velocities
+            structure.labels, structure.cart_coords, charges, magmoms, velocities
         ):
             content_lines.append(f"atom {coord[0]: .12e} {coord[1]: .12e} {coord[2]: .12e} {species}")
             if charge != 0:
@@ -557,8 +557,8 @@ class AimsControlIn(MSONable):
 
         content += f"{lim}\n\n"
         species_defaults = self._parameters.get("species_dir", "")
-        if not species_defaults:
-            raise KeyError("Species' defaults not specified in the parameters")
+        # if not species_defaults:
+        #     raise KeyError("Species' defaults not specified in the parameters")
         content += self.get_species_block(structure, species_defaults)
 
         return content
@@ -797,7 +797,10 @@ class SpeciesDefaults(list, MSONable):
         """Initialize species defaults from a structure."""
         labels = []
         elements = {}
-        for label, el in sorted(zip(struct.labels, struct.species)):
+        for label, specie in sorted(zip(struct.labels, struct.species)):
+            # specie can be either Specie or element
+            # (or a dict with fractional compositions)
+            el = specie.element if isinstance(specie, Species) else specie
             if not isinstance(el, Element):
                 raise TypeError("FHI-aims does not support fractional compositions")
             if (label is None) or (el is None):

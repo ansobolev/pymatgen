@@ -182,9 +182,19 @@ class AimsInputSet(InputSet):
 @dataclass
 class AimsInputGenerator(InputGenerator):
     """
-    A class to generate Aims input sets.
+    A class to generate FHI-aims input sets.
+
+        Required parameters (`xc`, `species_dir`, `k_grid`) can be provided
+        as separate keys or as entries in `user_params`. The entries in `user_params`
+        supersede the data given as separate keys.
 
     Attributes:
+        xc (str | dict[str, Any]): a name of XC functional to be used.
+            Can be either a single string or a dictionary, which has to have
+            a `name` key.
+        species_dir (str | dict[str, str]): a species' defaults directory
+            (or directories) to be used.
+        k_grid (list[int]): K-points grid to be used.
         user_params (dict[str, Any]): Updates the default
             parameters for the FHI-aims calculator
         user_kpoints_settings (dict[str, Any]):  The settings
@@ -195,8 +205,12 @@ class AimsInputGenerator(InputGenerator):
             automatically based on the metallicity of the structure
     """
 
+    xc: str | dict[str, Any] = "pbe"
+    species_dir: str | PathLike | dict[str, Any] = ""
+    k_grid: list[int] | None = None
     user_params: dict[str, Any] = field(default_factory=dict)
     user_kpoints_settings: dict[str, Any] = field(default_factory=dict)
+    use_symmetry: bool = False
     use_structure_charge: bool = False
     auto_mix_param: bool = False
 
@@ -205,6 +219,7 @@ class AimsInputGenerator(InputGenerator):
         structure: Structure | Molecule | None = None,
         prev_dir: PathLike | None = None,
         properties: list[str] | None = None,
+        input_set_kwargs: dict[str, Any] | None = None,
     ) -> AimsInputSet:
         """Generate an AimsInputSet object.
 
@@ -213,6 +228,8 @@ class AimsInputGenerator(InputGenerator):
                 Molecule to generate the input set for.
             prev_dir (str or Path): Path to the previous working directory
             properties (list[str]): System properties that are being calculated
+            input_set_kwargs (dict[str, Any]): Additional keyword arguments
+                from the Maker to the Input Set
 
         Returns:
             AimsInputSet: The input set for the calculation of structure
@@ -224,15 +241,27 @@ class AimsInputGenerator(InputGenerator):
         if structure is None:
             raise ValueError("No structure can be determined to generate the input set")
 
+        # Update the fields from the `Maker`-provided input_set_kwargs
+        if input_set_kwargs is None:
+            input_set_kwargs = {}
+        for key, val in input_set_kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, val)
+
         parameters = self._get_input_parameters(structure, prev_parameters)
         properties = self._get_properties(properties, parameters)
 
+        # Update parameters with the `use_` and `auto_` attributes
         if self.auto_mix_param and not all(elem.is_metal for elem in structure.composition):
             logger.info("Structure seems not to be metallic; setting `charge_mix_param` to non-metallic default")
             parameters["charge_mix_param"] = 0.3
 
         if self.use_structure_charge:
             parameters["charge"] = structure.charge
+
+        if self.use_symmetry:
+            logger.info("Using grid reduction based on structure symmetry")
+            parameters["rsly_symmetry"] = "all"
 
         return AimsInputSet(parameters=parameters, structure=structure, properties=properties)
 
@@ -322,10 +351,15 @@ class AimsInputGenerator(InputGenerator):
         """
         # Get the default configuration
         # FHI-aims recommends using their defaults so bare-bones default parameters
-        parameters: dict[str, Any] = {
-            "xc": "pbe",
-            "relativistic": "atomic_zora scalar",
-        }
+        parameters: dict[str, Any] = _parse_xc_entry(self.xc)
+        parameters.update(
+            {
+                "relativistic": "atomic_zora scalar",
+                "species_dir": self.species_dir,
+            }
+        )
+        if self.k_grid is not None:
+            parameters["k_grid"] = self.k_grid
 
         # Override default parameters with previous parameters
         prev_parameters = {} if prev_parameters is None else copy.deepcopy(prev_parameters)
@@ -338,6 +372,7 @@ class AimsInputGenerator(InputGenerator):
             if "density" not in kpt_settings:
                 kpt_settings["density"] = density
 
+        # update the parameters with input set specific values
         parameter_updates = self.get_parameter_updates(structure, prev_parameters)
         parameters = recursive_update(parameters, parameter_updates)
 
@@ -475,3 +510,28 @@ def recursive_update(dct: dict, up: dict) -> dict:
         else:
             dct[key] = val
     return dct
+
+
+def _parse_xc_entry(xc_entry: str | dict[str, Any]) -> dict[str, Any]:
+    """Parses the InputSet `xc` entry into _control.in_ `parameters` dictionary.
+    As of now, only one-word XC functionals and HSE06 are supported.
+    """
+    if isinstance(xc_entry, str):
+        if xc_entry == "hse06":
+            raise ValueError("HSE06 specific parameters not present. Add `omega` and `unit` to `xc` dictionary.")
+        return {"xc": xc_entry}
+
+    xc_params = {}
+    xc_name = xc_entry.get("name", "")
+    if not xc_name:
+        raise ValueError("XC functional name was not provided. Add `name` key to `xc` dictionary")
+    if xc_name == "hse06":
+        omega = xc_entry.get("omega", None)
+        unit = xc_entry.get("unit", None)
+        if omega is None or unit is None:
+            raise ValueError("HSE06 specific parameters not present. Add `omega` and `unit` to `xc` dictionary.")
+        xc_params["xc"] = f"{xc_name}    {omega}"
+        xc_params["hse_unit"] = unit
+    else:
+        xc_params["xc"] = xc_name
+    return xc_params
