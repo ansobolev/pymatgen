@@ -13,6 +13,22 @@ from monty.io import zopen
 from pymatgen.core import Molecule, Structure
 
 
+def check_control(name: str, value: Any, lines: str) -> bool:
+    """Check if the control appears with the given value
+    in reference lines' list.
+
+    Args:
+        name (str): the name of the control in `control.in` file
+        value (Any): the value of the control to check
+        lines (str): the `control.in` file
+    """
+    for line in lines.split("\n"):
+        if name in line and line.split()[0] == name:
+            ref_value = " ".join(line.split()[1:])
+            return ref_value == str(value)
+    return False
+
+
 def check_band(test_line: str, ref_line: str) -> bool:
     """Check if band lines are the same.
 
